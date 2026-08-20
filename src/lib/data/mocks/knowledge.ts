@@ -1,0 +1,211 @@
+import type { KnowledgeBase } from "@/lib/types";
+
+export const mockKnowledge: KnowledgeBase = {
+  portfolio: [
+    {
+      id: "port-1",
+      title: "Northline Analytics — SaaS marketing redesign",
+      nicheTags: ["web-design"],
+      outcomeMetric: "+34% trial starts in 60 days",
+      link: "https://portfolio.example/northline",
+      description:
+        "Full marketing site redesign for B2B analytics SaaS: homepage, pricing, features, design system handoff.",
+      createdAt: "2025-11-12T00:00:00Z",
+    },
+    {
+      id: "port-2",
+      title: "PulseHQ — pricing page system",
+      nicheTags: ["web-design", "e-commerce"],
+      outcomeMetric: "−22% bounce on pricing",
+      link: "https://portfolio.example/pulsehq",
+      description: "PLG pricing architecture with modular components for React team.",
+      createdAt: "2025-09-03T00:00:00Z",
+    },
+    {
+      id: "port-3",
+      title: "GlowTheory — clean beauty identity",
+      nicheTags: ["branding"],
+      outcomeMetric: "Retailer pitch deck approved Q1",
+      link: "https://portfolio.example/glowtheory",
+      description: "Logo, color, packaging direction, brand guidelines for DTC skincare.",
+      createdAt: "2025-06-20T00:00:00Z",
+    },
+    {
+      id: "port-4",
+      title: "TrailCo — Shopify PDP rebuild",
+      nicheTags: ["e-commerce"],
+      outcomeMetric: "1.4% → 2.3% CVR",
+      link: "https://portfolio.example/trailco",
+      description: "Outdoor apparel PDP template, speed work, upsell blocks.",
+      createdAt: "2025-08-14T00:00:00Z",
+    },
+    {
+      id: "port-5",
+      title: "Harbor Soap Co. — packaging direction",
+      nicheTags: ["branding"],
+      outcomeMetric: "3 SKU line cohesive launch",
+      description: "Packaging direction system and guidelines for indie soap brand.",
+      createdAt: "2025-04-02T00:00:00Z",
+    },
+    {
+      id: "port-6",
+      title: "LocalMed — multi-location SEO",
+      nicheTags: ["seo"],
+      outcomeMetric: "3 of 4 locations in map pack top 3",
+      link: "https://portfolio.example/localmed",
+      description: "GBP + on-page + schema for multi-location healthcare group.",
+      createdAt: "2025-10-01T00:00:00Z",
+    },
+  ],
+  caseStudies: [
+    {
+      id: "case-1",
+      title: "How Northline lifted trial starts 34%",
+      niche: "web-design",
+      challenge: "Dated marketing site underperforming against Series A peers.",
+      approach: "Conversion audit → information architecture → Figma system → eng handoff.",
+      result: "Trial starts +34% in 60 days; sales reported fewer 'is this legit?' objections.",
+      metrics: ["+34% trials", "−18% homepage bounce", "LCP 2.1s"],
+      createdAt: "2025-12-01T00:00:00Z",
+    },
+    {
+      id: "case-2",
+      title: "TrailCo conversion recovery",
+      niche: "e-commerce",
+      challenge: "Bloated theme, 1.4% CVR, slow PDPs.",
+      approach: "Dawn-based rebuild, PDP hierarchy, upsell blocks, speed budget.",
+      result: "CVR to 2.3% in 8 weeks; mobile LCP under 2s.",
+      metrics: ["1.4%→2.3% CVR", "LCP 4.8s→1.9s", "+18% ATC"],
+      createdAt: "2025-09-15T00:00:00Z",
+    },
+    {
+      id: "case-3",
+      title: "GlowTheory brand system for founders",
+      niche: "branding",
+      challenge: "Non-designer co-founders stuck on subjective logo debates.",
+      approach: "Decision worksheets + dual routes + packaging direction caps.",
+      result: "Shipped identity in 5 weeks; used in successful retailer meetings.",
+      metrics: ["5-week delivery", "2 routes → 1 system", "Guidelines PDF adopted"],
+      createdAt: "2025-07-01T00:00:00Z",
+    },
+  ],
+  testimonials: [
+    {
+      id: "test-1",
+      clientName: "Maya Chen",
+      clientRole: "Head of Growth, Northline",
+      quote:
+        "Alex didn't just make us look Series A — trial starts moved. The handoff was the cleanest we've had from a freelancer.",
+      niche: "web-design",
+      rating: 5,
+      createdAt: "2025-12-10T00:00:00Z",
+    },
+    {
+      id: "test-2",
+      clientName: "Jordan Blake",
+      clientRole: "Founder, TrailCo",
+      quote:
+        "We'd been burned by theme freelancers before. Alex tied every design choice to conversion and actually finished.",
+      niche: "e-commerce",
+      rating: 5,
+      createdAt: "2025-09-20T00:00:00Z",
+    },
+    {
+      id: "test-3",
+      clientName: "Sofia Martins",
+      clientRole: "Co-founder, GlowTheory",
+      quote:
+        "Finally a designer who could translate our gut feel into decisions we could both sign off on.",
+      niche: "branding",
+      rating: 5,
+      createdAt: "2025-07-12T00:00:00Z",
+    },
+    {
+      id: "test-4",
+      clientName: "Dr. Patel",
+      clientRole: "Owner, LocalMed Clinics",
+      quote:
+        "Clear monthly reporting, no jargon theater. Three clinics hit the map pack within a quarter.",
+      niche: "seo",
+      rating: 5,
+      createdAt: "2025-10-18T00:00:00Z",
+    },
+  ],
+  services: [
+    {
+      id: "svc-1",
+      name: "SaaS marketing site design",
+      description: "Figma systems for homepage, pricing, features with React handoff.",
+      niches: ["web-design"],
+      typicalPrice: "$4,000–$12,000",
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+    {
+      id: "svc-2",
+      name: "Shopify CRO & rebuilds",
+      description: "Theme rebuilds, PDP templates, speed, upsell systems.",
+      niches: ["e-commerce"],
+      typicalPrice: "$5,000–$15,000",
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+    {
+      id: "svc-3",
+      name: "Brand identity sprints",
+      description: "Logo, color, packaging direction, guidelines for founder-led brands.",
+      niches: ["branding"],
+      typicalPrice: "$3,000–$8,000",
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+    {
+      id: "svc-4",
+      name: "Local & content SEO",
+      description: "Multi-location local SEO and B2B content cluster strategy.",
+      niches: ["seo"],
+      typicalPrice: "$50–$90/hr or monthly retainers",
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+  ],
+  writingStyle: [
+    {
+      id: "ws-1",
+      name: "Default proposal voice",
+      sample:
+        "Short sentences. Specific observations. No 'I am writing to express.' Offer a small piece of work in the CTA.",
+      notes: "Conversational, ~55 formality, max ~350 words.",
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+    {
+      id: "ws-2",
+      name: "Metrics-first (e-comm clients)",
+      sample:
+        "Open with their number. State a realistic lift range. Proof before process.",
+      notes: "Use when client cites CVR, AOV, or speed metrics.",
+      createdAt: "2025-02-01T00:00:00Z",
+    },
+  ],
+  faqs: [
+    {
+      id: "faq-1",
+      question: "What's your typical turnaround for a marketing site redesign?",
+      answer: "Usually 3–5 weeks depending on page count and handoff depth.",
+      tags: ["process", "web-design"],
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+    {
+      id: "faq-2",
+      question: "Do you work in Figma only or also Webflow/Shopify?",
+      answer:
+        "Figma for design systems; Shopify theme implementation available. Webflow on request.",
+      tags: ["tools"],
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+    {
+      id: "faq-3",
+      question: "How do you handle revisions?",
+      answer:
+        "Two rounds per milestone included. Additional rounds quoted. Scope freezes after approved brief.",
+      tags: ["process"],
+      createdAt: "2025-01-01T00:00:00Z",
+    },
+  ],
+};

@@ -1,3 +1,24 @@
 {
-  "extends": ["next/core-web-vitals", "next/typescript"]
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "@/lib/db/client",
+            "message": "The raw Drizzle client bypasses the scoped-access layer (see lib/db/scoped.ts). Only lib/data/**, lib/admin/**, and lib/billing/** may import it directly, and every query there must still filter by userId by hand."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/lib/data/**", "src/lib/admin/**", "src/lib/billing/**", "src/lib/db/scoped.ts", "src/lib/audit-log.ts", "src/lib/rate-limit.ts", "src/lib/auth/**", "src/app/api/auth/**", "src/app/api/health/**", "src/app/api/cron/**"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }

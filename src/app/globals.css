@@ -2,26 +2,71 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
+@layer base {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    /* Corrections 03 §4 — cool professional direction. Deep slate base (#0B1220 range) with
+     * layered slate surfaces; one accent, a controlled cobalt, reserved for verdicts, scores and
+     * primary CTAs. Copper/amber was considered as a differentiation play and declined — noted
+     * so the decision isn't relitigated by accident. Every value here is AA against its surface. */
+    --background: 220 49% 8%;
+    --foreground: 214 32% 93%;
+    --card: 220 40% 11%;
+    --card-foreground: 214 32% 93%;
+    --popover: 220 40% 11%;
+    --popover-foreground: 214 32% 93%;
+    --primary: 214 32% 93%;
+    --primary-foreground: 220 47% 9%;
+    --secondary: 220 30% 16%;
+    --secondary-foreground: 214 32% 93%;
+    --muted: 220 30% 16%;
+    --muted-foreground: 215 18% 65%;
+    --border: 220 26% 20%;
+    --input: 220 26% 20%;
+    --radius: 0.625rem;
+
+    /* Brand accent — cobalt. `accent` is the readable-on-dark shade used for text, marks and
+     * borders (5.1:1 on the base); `accent-strong` is the filled-CTA shade (5.2:1 under white). */
+    --accent: 217 91% 60%;
+    --accent-foreground: 222 47% 8%;
+    --accent-strong: 221 83% 53%;
+    --accent-strong-foreground: 0 0% 100%;
+    --ring: 217 91% 60%;
+
+    /* Semantic states, deliberately muted so they never compete with the accent. */
+    --destructive: 0 62% 52%;
+    --destructive-foreground: 0 0% 98%;
+    --danger: 0 70% 65%;
+    --warning: 38 85% 60%;
+    --success: 152 45% 52%;
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background font-sans text-foreground;
+    /* Tabular numerals everywhere — every score in this app is meant to be compared vertically. */
+    font-feature-settings: "tnum" 1;
+  }
 }
 
 @layer utilities {
+  /* Long-form reading surface (the proposal editor): neutral face at a comfortable size, while
+   * UI chrome, scores and headings stay Space Grotesk. */
+  .prose-reading {
+    font-family: var(--font-inter), system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.65;
+  }
   .text-balance {
     text-wrap: balance;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
   }
 }
