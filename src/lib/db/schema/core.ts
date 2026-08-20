@@ -34,6 +34,10 @@ export const profiles = pgTable("profiles", {
   role: text("role", { enum: ["user", "admin", "owner"] }).notNull().default("user"),
   suspended: boolean("suspended").notNull().default(false),
   suspendedReason: text("suspended_reason"),
+  // Soft-delete: set by an admin, swept by the cron in api/cron/cleanup once past due. Null means
+  // not scheduled. The account stays fully suspended (blocked sign-in, data intact) the whole
+  // window, so canceling before the date is a full, clean undo. See AUDIT_REPORT.md P1-9.
+  deletionScheduledFor: timestamp("deletion_scheduled_for", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -187,6 +191,31 @@ export const pipelineRuns = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("pipeline_runs_user_id_idx").on(t.userId), index("pipeline_runs_job_id_idx").on(t.jobId)]
+);
+
+/** Learning engine (AUDIT_REPORT.md P1-6 — Phase 3 was never built; this is a real, intentionally
+ * scoped MVP, not the full spec). Generated daily by the cron in api/cron/cleanup once a user has
+ * >= 5 outcomes, one row per distinct pattern kind. `dismissedAt` set means "never show again" —
+ * the generator checks dismissedKind history before creating a new row of the same kind, so a
+ * dismissal is permanent, not just a hide-for-now. `expiresAt` lets a stale pattern age out even
+ * if never dismissed. */
+export const insightKindEnum = pgEnum("insight_kind", ["niche_performance_gap"]);
+
+export const insights = pgTable(
+  "insights",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: insightKindEnum("kind").notNull(),
+    message: text("message").notNull(),
+    metadata: jsonb("metadata").notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+  },
+  (t) => [index("insights_user_id_idx").on(t.userId), index("insights_user_kind_idx").on(t.userId, t.kind)]
 );
 
 export const attachments = pgTable(

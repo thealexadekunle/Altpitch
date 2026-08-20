@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreditChip } from "@/components/billing/credit-chip";
+import { DunningBanner } from "@/components/billing/dunning-banner";
+import { SiteStatusGate } from "@/components/site-status-gate";
+import { ImpersonationBanner } from "@/components/admin/impersonation-banner";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -40,10 +43,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     pathname.startsWith("/admin") ||
     MARKETING_ROUTES.some((route) => pathname.startsWith(route))
   ) {
-    return <>{children}</>;
+    return <SiteStatusGate>{children}</SiteStatusGate>;
   }
 
   return (
+    <SiteStatusGate>
     <div className="min-h-screen md:flex">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex md:w-56 md:flex-col md:border-r md:border-border md:bg-card/40">
@@ -111,8 +115,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <CreditChip />
         </div>
 
+        <ImpersonationBanner />
+        <DunningBanner />
+
         <main className="flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8">{children}</main>
       </div>
     </div>
+    </SiteStatusGate>
   );
 }

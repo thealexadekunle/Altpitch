@@ -56,7 +56,8 @@ export async function deleteFromR2(key: string): Promise<void> {
 }
 
 /** 1-hour signed download URL. */
-export async function getSignedDownloadUrl(key: string, expiresInSeconds = 3600): Promise<string> {
+// AUDIT_REPORT.md F5-1 — was 3600 (1hr), spec wants signed URLs valid for ≤10min.
+export async function getSignedDownloadUrl(key: string, expiresInSeconds = 600): Promise<string> {
   return getSignedUrl(r2Client(), new GetObjectCommand({ Bucket: bucketName(), Key: key }), { expiresIn: expiresInSeconds });
 }
 

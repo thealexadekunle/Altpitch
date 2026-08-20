@@ -1,7 +1,13 @@
 import type { FunnelStage } from "@/lib/types";
 
-/** Ordinal single-hue ramp — blue steps 700→500. All five clear 4.5:1 against white bar text. */
-const STEPS = ["#0d366b", "#104281", "#184f95", "#1c5cab", "#256abf"];
+/** Ordinal single-hue ramp, defined once in globals.css (AUDIT_REPORT.md K2-1) — steps dark→light. */
+const STEPS = [
+  "hsl(var(--chart-sequential-1))",
+  "hsl(var(--chart-sequential-2))",
+  "hsl(var(--chart-sequential-3))",
+  "hsl(var(--chart-sequential-4))",
+  "hsl(var(--chart-sequential-5))",
+];
 
 export function Funnel({ stages }: { stages: FunnelStage[] }) {
   const max = stages[0]?.count || 1;

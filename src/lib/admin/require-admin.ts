@@ -5,18 +5,23 @@ import { scopedDb } from "@/lib/db/scoped";
 import { db } from "@/lib/db/client";
 
 export class NotAdminError extends Error {
-  constructor(public status: 401 | 403) {
-    super(status === 401 ? "Unauthorized" : "Forbidden");
+  constructor(
+    public status: 401 | 403,
+    public code?: "not_admin" | "2fa_required"
+  ) {
+    super(status === 401 ? "Unauthorized" : code === "2fa_required" ? "2FA required" : "Forbidden");
   }
 }
 
 /** Every admin route and page calls this first. Role lives in `profiles.role`.
  *
- * No separate 2FA/assurance-level check is needed here: Better Auth's twoFactor plugin doesn't
- * issue a session at all until TOTP verification succeeds — signIn.email returns
- * `{twoFactorRedirect: true}` instead of a session when 2FA is pending (see login-form.tsx). A
- * truthy session from auth.api.getSession() already means 2FA was completed, if the account has
- * it enabled. */
+ * Better Auth's twoFactor plugin only blocks a *login* without TOTP once an account has 2FA
+ * enabled — it does nothing to force enrollment in the first place. An admin/owner account that
+ * has never enrolled TOTP gets a normal password-only session, and `session.user.twoFactorEnabled`
+ * on it is simply `false`. So this function checks that explicitly, distinct from the role check,
+ * and returns a machine-readable code so the client can route to /admin/security to enroll
+ * instead of just showing a bare "Forbidden." (Found live during the Corrections 03 audit: a
+ * freshly-promoted owner account with no 2FA had full /admin access — see AUDIT_REPORT.md P0-1.) */
 export async function requireAdmin(headers: Headers): Promise<{ session: Session; role: "admin" | "owner" }> {
   const session = await auth.api.getSession({ headers });
   if (!session) throw new NotAdminError(401);
@@ -24,7 +29,28 @@ export async function requireAdmin(headers: Headers): Promise<{ session: Session
   const profile = await scopedDb(session.user.id).profiles.get(session.user.id);
 
   if (!profile || profile.suspended || (profile.role !== "admin" && profile.role !== "owner")) {
-    throw new NotAdminError(403);
+    throw new NotAdminError(403, "not_admin");
+  }
+
+  if (!session.user.twoFactorEnabled) {
+    throw new NotAdminError(403, "2fa_required");
+  }
+
+  return { session, role: profile.role };
+}
+
+/** Role + suspended check only, no 2FA — used solely by the /admin page layout so a
+ * not-yet-enrolled admin can still navigate to /admin/security to enroll, instead of being
+ * bounced in a redirect loop by the same check that blocks them from it. Every actual data
+ * route still goes through requireAdmin()/withAdmin() above, which does enforce 2FA — this
+ * function grants no data access on its own, only lets the page shell render. */
+export async function requireAdminRole(headers: Headers): Promise<{ session: Session; role: "admin" | "owner" }> {
+  const session = await auth.api.getSession({ headers });
+  if (!session) throw new NotAdminError(401);
+
+  const profile = await scopedDb(session.user.id).profiles.get(session.user.id);
+  if (!profile || profile.suspended || (profile.role !== "admin" && profile.role !== "owner")) {
+    throw new NotAdminError(403, "not_admin");
   }
 
   return { session, role: profile.role };
@@ -48,7 +74,7 @@ export async function withAdmin<T>(
     return await handler(ctx);
   } catch (err) {
     if (err instanceof NotAdminError) {
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     }
     throw err;
   }

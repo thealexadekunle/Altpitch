@@ -11,6 +11,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AuthShell } from "@/components/auth/auth-shell";
+import { TurnstileWidget } from "@/components/auth/turnstile-widget";
+
+const TURNSTILE_ENABLED = Boolean(process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY);
 
 export function LoginForm() {
   const router = useRouter();
@@ -18,6 +21,7 @@ export function LoginForm() {
   const next = searchParams.get("next") ?? "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
@@ -37,8 +41,13 @@ export function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !password) return;
+    if (TURNSTILE_ENABLED && !turnstileToken) return;
     setSubmitting(true);
-    const { data, error } = await authClient.signIn.email({ email: email.trim(), password });
+    const { data, error } = await authClient.signIn.email({
+      email: email.trim(),
+      password,
+      fetchOptions: turnstileToken ? { headers: { "x-turnstile-token": turnstileToken } } : undefined,
+    });
     setSubmitting(false);
     if (error) {
       toast.error(error.message ?? "Sign in failed.");
@@ -127,7 +136,10 @@ export function LoginForm() {
             required
           />
         </div>
-        <Button type="submit" className="w-full" disabled={submitting}>
+
+        <TurnstileWidget onVerify={setTurnstileToken} />
+
+        <Button type="submit" className="w-full" disabled={submitting || (TURNSTILE_ENABLED && !turnstileToken)}>
           {submitting ? <Loader2 className="animate-spin" /> : null}
           Sign in
         </Button>

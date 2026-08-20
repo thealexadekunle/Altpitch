@@ -12,7 +12,20 @@ const AUTH_ONLY_ROUTES = ["/login", "/signup"];
 // Better Auth's 60s cookie cache, but still not free) before serving them. That round-trip was
 // the dominant cost on every page load, public or not, before this split existed.
 // /api/cron/* checks its own CRON_SECRET bearer token (Vercel's invoker has no user session).
-const NO_AUTH_CHECK_ROUTES = ["/pricing", "/terms", "/privacy", "/blog", "/api/health", "/forgot-password", "/api/auth", "/api/cron"];
+const NO_AUTH_CHECK_ROUTES = [
+  "/pricing",
+  "/terms",
+  "/privacy",
+  "/blog",
+  "/api/health",
+  "/forgot-password",
+  "/api/auth",
+  "/api/cron",
+  "/api/site-status",
+  // Metadata route (next/og) — social crawlers fetch this unauthenticated. Without this it
+  // 307'd to /login, so no OG preview image would ever actually render anywhere it's shared.
+  "/opengraph-image",
+];
 
 function skipsAuthCheck(pathname: string): boolean {
   if (pathname === "/") return true;

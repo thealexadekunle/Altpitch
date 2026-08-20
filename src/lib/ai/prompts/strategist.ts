@@ -12,11 +12,15 @@ interface RetrievedItem {
 /** Stage 6 — analysis + retrieved proof -> angle, proof selection. Only sees what Retriever
  * returned, and loads the same niche pack the Writer will (Corrections 03 §3b) so the angle it
  * picks is one this niche's clients actually respond to. */
-export function buildStrategistPrompt(analysis: ScorerOutput, retrieved: RetrievedItem[], parsed: ParsedJob) {
+export function buildStrategistPrompt(analysis: ScorerOutput, retrieved: RetrievedItem[], parsed: ParsedJob, activeInsights: string[] = []) {
   const pack = getNichePack(parsed.niche);
+  const insightsBlock =
+    activeInsights.length > 0
+      ? `\n\nThis user's own historical pattern (learning engine, informational only — never invent a claim on the strength of this alone, and never mention it to the client): ${activeInsights.join(" ")}`
+      : "";
   const system = `You choose the angle a proposal will open with and which proof items to use. You may only select from the knowledge base items provided below by their exact "id" value — if nothing retrieved is relevant, return an empty array rather than inventing an id or reaching for something unlisted.
 
-Niche: ${pack.label}. What convinces a client here: ${pack.proof} The angle must be one this kind of client responds to.
+Niche: ${pack.label}. What convinces a client here: ${pack.proof} The angle must be one this kind of client responds to.${insightsBlock}
 
 The angle names the CLIENT's situation, never the freelancer's credentials — the proposal's first two sentences will be built from it.
 

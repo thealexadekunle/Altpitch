@@ -16,6 +16,8 @@ export interface BillingStatus {
     spendable: number;
     hasActiveSubscription: boolean;
     allowed: boolean;
+    pastDue: boolean;
+    graceEndsAt: string | null;
   };
 }
 

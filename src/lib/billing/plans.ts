@@ -43,6 +43,10 @@ export const TOP_UP_PACK_ORDER: TopUpPackId[] = ["small", "medium", "large"];
 /** Trial credits are lifetime, not monthly — a recurring free tier invites throwaway accounts. */
 export const TRIAL_CREDITS = 3;
 
+/** Dunning: a failed payment sets subscription status to past_due, not canceled — access
+ * continues for this many days while the provider retries the charge, then locks. */
+export const DUNNING_GRACE_PERIOD_DAYS = 7;
+
 export type PlanId = "trial" | typeof PLAN.id;
 
 /**

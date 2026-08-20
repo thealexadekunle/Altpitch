@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SITE_URL } from "@/lib/site";
 
 /** Corrections 03 §4 — Space Grotesk for all UI chrome, scores and headings: squared forms that
  * read "instrument" rather than "startup landing page", and it carries tabular numerals (see
@@ -25,8 +26,25 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  // AUDIT_REPORT.md G2-1 — without this, `alternates: { canonical: "/" }` on child pages
+  // rendered as a bare relative href, which Lighthouse's own SEO audit flags as invalid.
+  metadataBase: new URL(SITE_URL),
   title: "Altpitch — AI Proposal OS",
   description: "Judgment, not generation. Analyze Upwork jobs, decide, and write proposals that land.",
+  // AUDIT_REPORT.md G2-2 — page-level metadata (title/description) still overrides per route;
+  // this is just the site-wide OG/Twitter shell every page inherits, including the image from
+  // opengraph-image.tsx (Next's file convention resolves it automatically, no url needed here).
+  openGraph: {
+    type: "website",
+    siteName: "Altpitch",
+    title: "Altpitch — AI Proposal OS",
+    description: "Judgment, not generation. Analyze Upwork jobs, decide, and write proposals that land.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Altpitch — AI Proposal OS",
+    description: "Judgment, not generation. Analyze Upwork jobs, decide, and write proposals that land.",
+  },
 };
 
 export default function RootLayout({

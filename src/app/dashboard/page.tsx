@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/error-state";
 import { PipelineCards, PipelineCardsSkeleton } from "@/components/dashboard/pipeline-cards";
 import { QueueRow, QueueRowSkeleton } from "@/components/dashboard/queue-row";
 import { ActivityFeed } from "@/components/dashboard/activity-feed";
+import { InsightsPanel } from "@/components/dashboard/insights-panel";
 
 export default function DashboardPage() {
   const { data, loading, error, reload } = useAsync(() => getDashboard(), []);
@@ -29,6 +30,8 @@ export default function DashboardPage() {
           </Link>
         </Button>
       </div>
+
+      <InsightsPanel />
 
       {error && <ErrorState message={error} onRetry={reload} />}
 

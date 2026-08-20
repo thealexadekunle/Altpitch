@@ -29,7 +29,12 @@ export function SignupForm() {
     if (!name.trim() || !email.trim() || !password) return;
     if (TURNSTILE_ENABLED && !turnstileToken) return;
     setSubmitting(true);
-    const { error } = await authClient.signUp.email({ email: email.trim(), password, name: name.trim() });
+    const { error } = await authClient.signUp.email({
+      email: email.trim(),
+      password,
+      name: name.trim(),
+      fetchOptions: turnstileToken ? { headers: { "x-turnstile-token": turnstileToken } } : undefined,
+    });
     setSubmitting(false);
     if (error) {
       toast.error(error.message ?? "Sign up failed.");
@@ -82,10 +87,8 @@ export function SignupForm() {
           />
         </div>
 
-        {/* Renders nothing until NEXT_PUBLIC_TURNSTILE_SITE_KEY is set. Note: signup goes
-            straight through authClient.signUp.email() client-side, no server route in front of
-            it — the token is captured here but nothing verifies it server-side yet (see
-            lib/turnstile.ts). Real enforcement needs a server route in this path. */}
+        {/* Renders nothing until NEXT_PUBLIC_TURNSTILE_SITE_KEY is set. Verified server-side by
+            the auth.ts hooks.before check against TURNSTILE_GATED_PATHS. */}
         <TurnstileWidget onVerify={setTurnstileToken} />
 
         <Button type="submit" className="w-full" disabled={submitting || (TURNSTILE_ENABLED && !turnstileToken)}>

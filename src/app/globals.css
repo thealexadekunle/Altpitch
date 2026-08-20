@@ -38,6 +38,15 @@
     --danger: 0 70% 65%;
     --warning: 38 85% 60%;
     --success: 152 45% 52%;
+
+    /* Ordinal single-hue ramp (blue, dark→light) for sequential charts (e.g. the funnel) — the
+     * one hex ramp in the app lives here, not in the component (AUDIT_REPORT.md K2-1). All five
+     * steps clear 4.5:1 against white bar text. */
+    --chart-sequential-1: 214 78% 24%;
+    --chart-sequential-2: 213 78% 28%;
+    --chart-sequential-3: 214 72% 34%;
+    --chart-sequential-4: 213 72% 39%;
+    --chart-sequential-5: 213 68% 45%;
   }
 }
 

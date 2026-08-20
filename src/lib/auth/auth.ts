@@ -1,5 +1,6 @@
 import "server-only";
 import { betterAuth } from "better-auth";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { twoFactor } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
@@ -8,6 +9,10 @@ import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { sendEmail } from "@/lib/email.service";
 import { TRIAL_CREDITS } from "@/lib/billing/plans";
+import { verifyTurnstileToken } from "@/lib/turnstile";
+import { getRequestIp } from "@/lib/request-ip";
+
+const TURNSTILE_GATED_PATHS = new Set(["/sign-up/email", "/sign-in/email"]);
 
 /**
  * Auth config — env vars GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET for the Google provider. TOTP
@@ -39,6 +44,19 @@ export const auth = betterAuth({
       });
     },
   },
+  // Verification is required before the first *analysis*, not before login (see the
+  // emailVerified check in /api/analyze/route.ts) — signup still issues a session immediately so
+  // a new user can look around and set up their knowledge base before verifying.
+  emailVerification: {
+    sendOnSignUp: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      await sendEmail({
+        to: user.email,
+        subject: "Verify your Altpitch email",
+        html: `<p>Click below to verify your email — you'll need this before running your first analysis.</p><p><a href="${url}">${url}</a></p>`,
+      });
+    },
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? "",
@@ -48,6 +66,23 @@ export const auth = betterAuth({
   // nextCookies must be last — it's what actually writes Set-Cookie headers from route handlers
   // and server actions in the App Router; every plugin before it just prepares the response.
   plugins: [twoFactor(), nextCookies()],
+  // Turnstile enforcement (Corrections 02 §2 + audit P1-2) — the widget alone was cosmetic: it
+  // rendered and captured a token, but nothing server-side ever checked it. This hook is that
+  // check, on the two endpoints that actually need it. verifyTurnstileToken() fails open (returns
+  // true) when TURNSTILE_SECRET_KEY isn't set, so this is a no-op in every environment that never
+  // configured Turnstile — same "scaffold now, wire keys later" behavior as before, just now
+  // actually wired to fire once a key exists instead of dead code.
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (!TURNSTILE_GATED_PATHS.has(ctx.path)) return;
+      const token = ctx.request?.headers.get("x-turnstile-token") ?? "";
+      const ip = ctx.request ? getRequestIp(ctx.request) : null;
+      const ok = await verifyTurnstileToken(token, ip);
+      if (!ok) {
+        throw new APIError("BAD_REQUEST", { message: "Verification failed — please try again." });
+      }
+    }),
+  },
   // Better Auth's user table has no built-in row-seeding hook, so the app does it here — every
   // account, including Google sign-ups, goes through user.create, so this is the one place both
   // seeds (profile, trial credits) are guaranteed to run.

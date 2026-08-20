@@ -1,8 +1,8 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { subscriptions } from "@/lib/db/schema";
-import { PLAN, type PlanId, type TopUpPackId } from "@/lib/billing/plans";
+import { subscriptions, webhookEvents } from "@/lib/db/schema";
+import { PLAN, DUNNING_GRACE_PERIOD_DAYS, type PlanId, type TopUpPackId } from "@/lib/billing/plans";
 
 /**
  * Generic billing provider interface. `subscriptions.provider` is `"unconfigured"` until a real
@@ -59,8 +59,17 @@ export interface SubscriptionUpsert {
 }
 
 /** Webhook-driven subscription write. Lives here rather than in the route so the raw Drizzle
- * client stays inside lib/billing/** where the eslint rule allows it. */
+ * client stays inside lib/billing/** where the eslint rule allows it.
+ *
+ * pastDueSince starts the 7-day dunning clock the first time a webhook reports past_due, and is
+ * read here (not written) rather than trusted from the caller — a replayed past_due webhook
+ * (see the P1-4 idempotency fix) must not reset an already-running grace period back to day zero. */
 export async function upsertSubscription(input: SubscriptionUpsert): Promise<void> {
+  const existing = await getSubscription(input.userId);
+
+  const pastDueSince =
+    input.status === "past_due" ? (existing?.pastDueSince ?? new Date()) : null;
+
   const values = {
     provider: billingProvider.name,
     providerCustomerId: input.providerCustomerId ?? null,
@@ -68,6 +77,7 @@ export async function upsertSubscription(input: SubscriptionUpsert): Promise<voi
     plan: (input.status === "canceled" ? "trial" : PLAN.id) as PlanId,
     status: input.status,
     currentPeriodEnd: input.currentPeriodEnd ?? null,
+    pastDueSince,
   };
 
   await db
@@ -76,9 +86,39 @@ export async function upsertSubscription(input: SubscriptionUpsert): Promise<voi
     .onConflictDoUpdate({ target: subscriptions.userId, set: { ...values, updatedAt: new Date() } });
 }
 
+/** Returns true if this event id hasn't been processed before (and claims it atomically so it
+ * won't be again). False means "already applied, do nothing" — see the webhook route's own
+ * doc comment for why this has to happen before any credit/subscription effect, not after. */
+export async function claimWebhookEvent(eventId: string, eventType: string): Promise<boolean> {
+  const inserted = await db
+    .insert(webhookEvents)
+    .values({ id: eventId, eventType })
+    .onConflictDoNothing()
+    .returning({ id: webhookEvents.id });
+  return inserted.length > 0;
+}
+
 export async function getSubscription(userId: string) {
   const [row] = await db.select().from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1);
   return row ?? null;
+}
+
+/** True for the first DUNNING_GRACE_PERIOD_DAYS after a subscription first went past_due. */
+export function isWithinGracePeriod(pastDueSince: Date | null): boolean {
+  if (!pastDueSince) return false;
+  const graceEndsAt = pastDueSince.getTime() + DUNNING_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+  return Date.now() < graceEndsAt;
+}
+
+/** Access during dunning: active, or past_due but still inside the grace window. Distinct from
+ * `getCurrentPlan`, which is about *plan identity* (what to show as "your plan"), not spending
+ * rights — a past_due-in-grace user is still shown as subscribed and can still spend credits. */
+export async function hasSpendableSubscriptionAccess(userId: string): Promise<boolean> {
+  const sub = await getSubscription(userId);
+  if (!sub) return false;
+  if (sub.status === "active") return true;
+  if (sub.status === "past_due") return isWithinGracePeriod(sub.pastDueSince);
+  return false;
 }
 
 /** Every user is on "trial" until a subscriptions row says otherwise — there's no separate

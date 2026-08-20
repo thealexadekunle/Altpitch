@@ -55,3 +55,6 @@ export { tightenAnswer } from "./proposals.service";
 
 export { getBillingStatus, startSubscriptionCheckout, startTopUpCheckout } from "./billing.service";
 export type { BillingStatus } from "./billing.service";
+
+export { getInsights, dismissInsight } from "./insights.service";
+export type { InsightView } from "./insights.service";

@@ -26,6 +26,12 @@ export async function POST(request: Request) {
   if (!session) {
     return new Response("Unauthorized", { status: 401 });
   }
+  if (!session.user.emailVerified) {
+    return new Response(JSON.stringify({ error: "email_not_verified" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
   const userId = session.user.id;
   const scoped = scopedDb(userId);
 

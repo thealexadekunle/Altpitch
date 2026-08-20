@@ -36,6 +36,8 @@ interface Operations {
   overBudget: OverBudgetRow[];
   failures: { status: string; count: number }[];
   runDurations: RunDuration[];
+  cronLastRunAt: string | null;
+  databaseTarget: string;
 }
 
 const seconds = (ms: number | null) => (ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`);
@@ -57,6 +59,14 @@ export default function AdminOperationsPage() {
         <p className="text-sm text-muted-foreground">
           Pipeline latency against budget. Target p50 {seconds(data?.budget.p50TargetMs ?? 60000)}, hard ceiling{" "}
           {seconds(data?.budget.ceilingMs ?? 120000)}.
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Database: <span className="font-mono text-foreground">{data?.databaseTarget ?? "…"}</span>
+          {" · "}
+          Cron last ran:{" "}
+          <span className="text-foreground">
+            {data?.cronLastRunAt ? new Date(data.cronLastRunAt).toLocaleString() : "never"}
+          </span>
         </p>
       </div>
 

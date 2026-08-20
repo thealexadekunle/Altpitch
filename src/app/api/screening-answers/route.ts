@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
 import { asc, eq } from "drizzle-orm";
-import { auth } from "@/lib/auth/auth";
 import { scopedDb } from "@/lib/db/scoped";
 import { screeningAnswers } from "@/lib/db/schema";
+import { getImpersonatedOrOwnUserId } from "@/lib/admin/impersonation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const effective = await getImpersonatedOrOwnUserId(request);
+  if (!effective) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const jobId = new URL(request.url).searchParams.get("jobId");
   if (!jobId) return NextResponse.json({ error: "jobId query param required" }, { status: 400 });
 
-  const answers = await scopedDb(session.user.id).screeningAnswers.list({
+  const answers = await scopedDb(effective.userId).screeningAnswers.list({
     where: eq(screeningAnswers.jobId, jobId),
     orderBy: asc(screeningAnswers.createdAt),
   });

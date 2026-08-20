@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
-import { and, desc, gt, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { withAdmin, adminDb } from "@/lib/admin/require-admin";
-import { pipelineRuns } from "@/lib/db/schema";
+import { pipelineRuns, auditLog } from "@/lib/db/schema";
 import { PIPELINE_CEILING_MS, PIPELINE_P50_TARGET_MS } from "@/lib/ai/budget";
 
 export const dynamic = "force-dynamic";
+
+/** Which Neon endpoint this deploy is actually talking to — the host only, never credentials.
+ * There's no official Neon-Vercel branch integration wired up (this project's DATABASE_URL was
+ * set by hand), so this is the honest version of "am I on prod": the real connection target,
+ * not a branch name Neon's API would have to be called to confirm. */
+function databaseTarget(): string {
+  try {
+    return new URL(process.env.DATABASE_URL ?? "").hostname || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
 
 /**
  * Operations view — Corrections 03 §2 requires every over-budget run to be visible here.
@@ -15,7 +27,7 @@ export async function GET(request: Request) {
   return withAdmin(request, async () => {
     const db = adminDb();
 
-    const [stageStats, overBudget, failures, runDurations] = await Promise.all([
+    const [stageStats, overBudget, failures, runDurations, lastCronRun] = await Promise.all([
       db
         .select({
           stage: pipelineRuns.stage,
@@ -62,6 +74,15 @@ export async function GET(request: Request) {
         .groupBy(pipelineRuns.jobId)
         .orderBy(desc(sql`max(${pipelineRuns.updatedAt})`))
         .limit(20),
+
+      // Cron writes this action on every run (see api/cron/cleanup/route.ts) — reusing it as the
+      // last-run signal instead of a second table just for a timestamp.
+      db
+        .select({ createdAt: auditLog.createdAt })
+        .from(auditLog)
+        .where(eq(auditLog.action, "cron.cleanup_rate_limit_hits"))
+        .orderBy(desc(auditLog.createdAt))
+        .limit(1),
     ]);
 
     return NextResponse.json({
@@ -70,6 +91,8 @@ export async function GET(request: Request) {
       overBudget,
       failures,
       runDurations,
+      cronLastRunAt: lastCronRun[0]?.createdAt ?? null,
+      databaseTarget: databaseTarget(),
     });
   });
 }

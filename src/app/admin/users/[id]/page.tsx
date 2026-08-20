@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Eye } from "lucide-react";
+import { ArrowLeft, Loader2, Eye, KeyRound, Trash2 } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,13 @@ interface AdminUserDetail {
   id: string;
   email: string;
   createdAt: string;
-  profile: { role: "user" | "admin" | "owner"; suspended: boolean; suspendedReason: string | null; name: string } | null;
+  profile: {
+    role: "user" | "admin" | "owner";
+    suspended: boolean;
+    suspendedReason: string | null;
+    name: string;
+    deletionScheduledFor: string | null;
+  } | null;
   credits: { used: number; granted: number } | null;
   subscription: { plan: string; status: string } | null;
   jobCount: number;
@@ -31,6 +37,8 @@ interface ImpersonatedJob {
 
 export default function AdminUserDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const [impersonating, setImpersonating] = useState(false);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [reason, setReason] = useState("");
   const [creditsToGrant, setCreditsToGrant] = useState("3");
@@ -64,6 +72,21 @@ export default function AdminUserDetailPage() {
       toast.error(err instanceof Error ? err.message : "Request failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleImpersonate() {
+    setImpersonating(true);
+    try {
+      const res = await fetch(`/api/admin/users/${params.id}/impersonate`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Couldn't start impersonation.");
+      }
+      router.push("/dashboard");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't start impersonation.");
+      setImpersonating(false);
     }
   }
 
@@ -161,6 +184,40 @@ export default function AdminUserDetailPage() {
               </Button>
             </div>
           )}
+
+          <div className="border-t border-border pt-3">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => handlePatch({ forcePasswordReset: true })}>
+              {busy ? <Loader2 className="animate-spin" /> : <KeyRound />}
+              Force password reset
+            </Button>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Signs them out everywhere immediately and emails a reset link. They can&apos;t sign back in with their old password.
+            </p>
+          </div>
+
+          <div className="border-t border-border pt-3">
+            {detail.profile?.deletionScheduledFor ? (
+              <div className="space-y-2">
+                <p className="text-sm text-destructive">
+                  Scheduled for permanent deletion on {new Date(detail.profile.deletionScheduledFor).toLocaleDateString()}.
+                </p>
+                <Button variant="outline" size="sm" disabled={busy} onClick={() => handlePatch({ scheduleDeletion: "cancel" })}>
+                  {busy ? <Loader2 className="animate-spin" /> : null}
+                  Cancel deletion
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <Button variant="destructive" size="sm" disabled={busy} onClick={() => handlePatch({ scheduleDeletion: "schedule" })}>
+                  {busy ? <Loader2 className="animate-spin" /> : <Trash2 />}
+                  Schedule deletion (7-day window)
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Suspends the account immediately. Data is only permanently deleted after 7 days — cancelable any time before then.
+                </p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -173,8 +230,15 @@ export default function AdminUserDetailPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            View this user&apos;s job posts as they see them. No write access — every view is logged to the audit trail.
+            Browse the real app as this user for up to 30 minutes — read-only, bannered on every page, and any write
+            attempt lands on your own admin account, not theirs. Every start/stop is audit-logged.
           </p>
+          <Button variant="outline" size="sm" disabled={impersonating} onClick={handleImpersonate}>
+            {impersonating ? <Loader2 className="animate-spin" /> : <Eye />}
+            Impersonate (read-only)
+          </Button>
+
+          <p className="pt-2 text-xs text-muted-foreground">Or just list their job posts here, no navigation:</p>
           {jobs === null && (
             <Button variant="outline" onClick={handleViewJobs} disabled={loadingJobs}>
               {loadingJobs ? <Loader2 className="animate-spin" /> : <Eye />}

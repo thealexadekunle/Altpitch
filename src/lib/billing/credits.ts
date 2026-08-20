@@ -2,7 +2,8 @@ import "server-only";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { db, dbTx } from "@/lib/db/client";
 import { usageCredits, subscriptions, creditPurchases } from "@/lib/db/schema";
-import { BURN_ORDER, PLAN, TRIAL_CREDITS, TOP_UP_PACKS, type CreditBucket, type TopUpPackId } from "@/lib/billing/plans";
+import { BURN_ORDER, PLAN, TRIAL_CREDITS, TOP_UP_PACKS, DUNNING_GRACE_PERIOD_DAYS, type CreditBucket, type TopUpPackId } from "@/lib/billing/plans";
+import { isWithinGracePeriod } from "@/lib/billing/billing.service";
 
 export interface BucketBalance {
   granted: number;
@@ -17,6 +18,9 @@ export interface CreditBalance {
   /** What the user can actually spend right now — top-ups are excluded without a subscription. */
   spendable: number;
   hasActiveSubscription: boolean;
+  /** Payment failed, provider is retrying, access continues until graceEndsAt. */
+  pastDue: boolean;
+  graceEndsAt: string | null;
 }
 
 export interface CreditCheckResult {
@@ -49,7 +53,11 @@ export async function getCreditBalance(userId: string): Promise<CreditBalance> {
       .select({ period: usageCredits.period, granted: usageCredits.granted, used: usageCredits.used })
       .from(usageCredits)
       .where(and(eq(usageCredits.userId, userId), inArray(usageCredits.period, [...BURN_ORDER]))),
-    db.select({ status: subscriptions.status }).from(subscriptions).where(eq(subscriptions.userId, userId)).limit(1),
+    db
+      .select({ status: subscriptions.status, pastDueSince: subscriptions.pastDueSince })
+      .from(subscriptions)
+      .where(eq(subscriptions.userId, userId))
+      .limit(1),
   ]);
 
   const bucket = (name: CreditBucket): BucketBalance => {
@@ -61,7 +69,14 @@ export async function getCreditBalance(userId: string): Promise<CreditBalance> {
   const lifetime = bucket("lifetime");
   const subscription = bucket("subscription");
   const topup = bucket("topup");
-  const hasActiveSubscription = sub?.status === "active";
+
+  // Dunning: past_due keeps spending rights for DUNNING_GRACE_PERIOD_DAYS while the provider
+  // retries the charge, then locks the same as a full lapse — see AUDIT_REPORT.md P1-5, which
+  // found this was previously an immediate hard lock with no grace period at all.
+  const pastDue = sub?.status === "past_due";
+  const inGrace = pastDue && isWithinGracePeriod(sub.pastDueSince);
+  const hasActiveSubscription = sub?.status === "active" || inGrace;
+  const graceEndsAt = pastDue && sub.pastDueSince ? new Date(sub.pastDueSince.getTime() + DUNNING_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000).toISOString() : null;
 
   return {
     lifetime,
@@ -69,6 +84,8 @@ export async function getCreditBalance(userId: string): Promise<CreditBalance> {
     topup,
     spendable: lifetime.remaining + (hasActiveSubscription ? subscription.remaining + topup.remaining : 0),
     hasActiveSubscription,
+    pastDue: Boolean(pastDue),
+    graceEndsAt,
   };
 }
 

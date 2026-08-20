@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { desc } from "drizzle-orm";
-import { auth } from "@/lib/auth/auth";
 import { scopedDb } from "@/lib/db/scoped";
 import { jobs } from "@/lib/db/schema";
+import { getImpersonatedOrOwnUserId } from "@/lib/admin/impersonation";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const scoped = scopedDb(session.user.id);
+  const effective = await getImpersonatedOrOwnUserId(request);
+  if (!effective) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const scoped = scopedDb(effective.userId);
 
   const [jobRows, analysisRows, attachmentRows] = await Promise.all([
     scoped.jobs.list({ orderBy: desc(jobs.createdAt) }),

@@ -7,6 +7,7 @@ import { RunBudget } from "@/lib/ai/budget";
 import { retrieveKnowledgeItems } from "@/lib/ai/retriever";
 import { checkProposalRules, proposalCharCount } from "@/lib/ai/proposal-rules";
 import { buildAttachmentContentBlocks } from "@/lib/ai/attachment-extract";
+import { getActiveInsights } from "@/lib/insights/generate";
 import {
   ParsedJobSchema,
   JobAnalyzerOutputSchema,
@@ -268,9 +269,10 @@ export async function* runProposalPipeline(userId: string, jobId: string): Async
         selectedPortfolioIds: (existingMeta.selectedPortfolioIds ?? []).filter((id) => retrievedIds.has(id)),
       };
     } else {
+      const activeInsights = (await getActiveInsights(userId)).map((i) => i.message);
       const strategyRaw = await runStage({
         stage: "strategist",
-        ...buildStrategistPrompt(scorerLike, retrieved, parsed),
+        ...buildStrategistPrompt(scorerLike, retrieved, parsed, activeInsights),
         schema: StrategistOutputSchema,
         userId,
         jobId,

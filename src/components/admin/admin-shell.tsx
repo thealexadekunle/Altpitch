@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Users, ShieldAlert, Megaphone, Flag, ArrowLeft, KeyRound, Activity, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
@@ -21,8 +23,13 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({ children, twoFactorEnabled }: { children: React.ReactNode; twoFactorEnabled: boolean }) {
   const pathname = usePathname();
+  const onSecurityPage = pathname === "/admin/security";
+  // Every /api/admin/* route independently enforces 2FA (requireAdmin in lib/admin/require-admin.ts)
+  // — this block is a UX courtesy, not the security boundary. It exists so a not-yet-enrolled
+  // admin sees why every panel is empty instead of a wall of failed fetches.
+  const blocked = !twoFactorEnabled && !onSecurityPage;
 
   return (
     <div className="min-h-screen md:flex">
@@ -82,7 +89,31 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <main className="flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8">{children}</main>
+        <main className="flex-1 px-4 py-6 sm:px-6 md:px-8 md:py-8">
+          {blocked ? (
+            <div className="mx-auto max-w-md">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <KeyRound className="h-4 w-4 text-destructive" />
+                    Enroll 2FA to continue
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    Admin and owner accounts require TOTP two-factor authentication. This account
+                    hasn&apos;t enrolled yet, so every admin panel is locked until it does.
+                  </p>
+                  <Button asChild className="w-full">
+                    <Link href="/admin/security">Enroll now</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          ) : (
+            children
+          )}
+        </main>
       </div>
     </div>
   );

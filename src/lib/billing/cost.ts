@@ -9,7 +9,9 @@ import { MODELS } from "@/lib/ai/models";
  * Rates are USD per million tokens. Update them here — nowhere else reads a price.
  */
 export const TOKEN_RATES_USD_PER_MTOK: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-6": { input: 3, output: 15 },
+  // Keyed off MODELS.reasoning, not a copy-pasted literal (AUDIT_REPORT.md D11-1) — model ids
+  // live in exactly one place, lib/ai/models.ts.
+  [MODELS.reasoning]: { input: 3, output: 15 },
 };
 
 /** A model that ran before its rate was added still costs something — Sonnet rates are the

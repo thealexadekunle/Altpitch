@@ -6,6 +6,7 @@ import { runStage } from "@/lib/ai/client";
 import { SectionRewriteSchema, ProposalSectionKeySchema } from "@/lib/ai/schemas";
 import { buildRewriteSectionPrompt } from "@/lib/ai/prompts/rewrite-section";
 import { checkRateLimit, RATE_LIMITS, rateLimitResponse } from "@/lib/rate-limit";
+import type { ProposalSection } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -13,13 +14,6 @@ const BodySchema = z.object({
   proposalId: z.string().uuid(),
   sectionKey: ProposalSectionKeySchema,
 });
-
-interface ProposalSectionRow {
-  key: string;
-  label: string;
-  content: string;
-  alternativeContent: string;
-}
 
 /** "Rewrite section" — real Writer call for one section, replacing the Phase 1 mock's
  * content/alternativeContent swap. */
@@ -44,7 +38,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Proposal not found" }, { status: 404 });
   }
 
-  const sections = proposal.sections as unknown as ProposalSectionRow[];
+  const sections = proposal.sections as unknown as ProposalSection[];
   const target = sections.find((s) => s.key === parsedBody.data.sectionKey);
   if (!target) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });

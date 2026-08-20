@@ -14,6 +14,8 @@ import { ClientQuestionsInput } from "@/components/analyze/client-questions-inpu
 import { AttachmentDropzone } from "@/components/analyze/attachment-dropzone";
 import { UpgradeModal } from "@/components/billing/upgrade-modal";
 import { getBillingStatus, type BillingStatus } from "@/lib/data";
+import { authClient } from "@/lib/auth/client";
+import { MailWarning, Loader2 } from "lucide-react";
 import type { AnalysisStage } from "@/lib/types";
 
 const SAMPLE_PLACEHOLDER = `Paste the full Upwork job post here — title, description, budget, and screening questions if shown.
@@ -30,6 +32,9 @@ export default function AnalyzePage() {
   const [stage, setStage] = useState<AnalysisStage>("idle");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resending, setResending] = useState(false);
+  const { data: session } = authClient.useSession();
 
   async function handleAnalyze() {
     if (!pasteDraft.trim()) {
@@ -55,11 +60,26 @@ export default function AnalyzePage() {
           .then(setBillingStatus)
           .catch(() => {});
         setShowUpgradeModal(true);
+      } else if (err instanceof Error && err.message === "email_not_verified") {
+        setNeedsVerification(true);
       } else {
         toast.error(err instanceof Error ? err.message : "Analysis failed.");
       }
       setSubmitting(false);
       setStage("idle");
+    }
+  }
+
+  async function handleResendVerification() {
+    if (!session?.user.email) return;
+    setResending(true);
+    try {
+      await authClient.sendVerificationEmail({ email: session.user.email, callbackURL: "/analyze" });
+      toast.success("Verification email sent — check your inbox.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't send verification email.");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -86,6 +106,26 @@ export default function AnalyzePage() {
           Paste the raw Upwork post. Altpitch scores fit, win probability, ROI, and competition, then tells you Apply, Skip, or Borderline — with reasoning.
         </p>
       </div>
+
+      {needsVerification && (
+        <Card className="border-destructive/40 bg-destructive/5">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-2.5">
+              <MailWarning className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <div>
+                <p className="text-sm font-medium">Verify your email to run your first analysis</p>
+                <p className="text-xs text-muted-foreground">
+                  We sent a link to {session?.user.email ?? "your email"} when you signed up. Didn&apos;t get it?
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="outline" onClick={handleResendVerification} disabled={resending}>
+              {resending ? <Loader2 className="animate-spin" /> : null}
+              Resend email
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="space-y-5 p-5">

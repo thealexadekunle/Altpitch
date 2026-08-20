@@ -125,6 +125,71 @@ describe("scopedDb: owner-scoped tables refuse cross-user access", () => {
     await scopedA.outcomes.remove(outcome.id);
   });
 
+  it("analyses: User B cannot read, update, or delete User A's analysis", async () => {
+    const scopedA = scopedDb(userAId);
+    const scopedB = scopedDb(userBId);
+
+    const analysis = await scopedA.analyses.insert({
+      jobId: jobAId,
+      verdict: "apply",
+      fitScore: 80,
+      winProbability: 60,
+      roiScore: 70,
+      competition: 40,
+      confidence: 75,
+    });
+
+    const readAsB = await scopedB.analyses.get(analysis.id);
+    expect(readAsB).toBeUndefined();
+
+    const updateAsB = await scopedB.analyses.update(analysis.id, { fitScore: 0 });
+    expect(updateAsB).toBeUndefined();
+
+    const [stillEighty] = await db.select({ fitScore: schema.analyses.fitScore }).from(schema.analyses).where(eq(schema.analyses.id, analysis.id));
+    expect(stillEighty.fitScore).toBe(80); // unchanged — User B's update touched 0 rows
+
+    await scopedA.analyses.remove(analysis.id);
+  });
+
+  it("proposals: User B cannot read, update, or delete User A's proposal", async () => {
+    const scopedA = scopedDb(userAId);
+    const scopedB = scopedDb(userBId);
+
+    const proposal = await scopedA.proposals.insert({ jobId: jobAId });
+
+    const readAsB = await scopedB.proposals.get(proposal.id);
+    expect(readAsB).toBeUndefined();
+
+    const updateAsB = await scopedB.proposals.update(proposal.id, { status: "sent" });
+    expect(updateAsB).toBeUndefined();
+
+    const [stillDraft] = await db.select({ status: schema.proposals.status }).from(schema.proposals).where(eq(schema.proposals.id, proposal.id));
+    expect(stillDraft.status).toBe("draft"); // unchanged — User B's update touched 0 rows
+
+    await scopedA.proposals.remove(proposal.id);
+  });
+
+  it("screeningAnswers: User B cannot read, update, or delete User A's screening answer", async () => {
+    const scopedA = scopedDb(userAId);
+    const scopedB = scopedDb(userBId);
+
+    const answer = await scopedA.screeningAnswers.insert({ jobId: jobAId, question: "Have you done this before?" });
+
+    const readAsB = await scopedB.screeningAnswers.get(answer.id);
+    expect(readAsB).toBeUndefined();
+
+    const updateAsB = await scopedB.screeningAnswers.update(answer.id, { answer: "Hijacked" });
+    expect(updateAsB).toBeUndefined();
+
+    const [stillBlank] = await db
+      .select({ answer: schema.screeningAnswers.answer })
+      .from(schema.screeningAnswers)
+      .where(eq(schema.screeningAnswers.id, answer.id));
+    expect(stillBlank.answer).toBe(""); // unchanged — User B's update touched 0 rows
+
+    await scopedA.screeningAnswers.remove(answer.id);
+  });
+
   it("pipelineRuns: User B cannot read User A's pipeline run logs", async () => {
     const scopedA = scopedDb(userAId);
     const scopedB = scopedDb(userBId);
