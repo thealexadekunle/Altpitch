@@ -35,6 +35,16 @@ export async function POST(request: Request) {
   const userId = session.user.id;
   const scoped = scopedDb(userId);
 
+  // Kill switch (ALTPITCH_ADMIN_BUILD.md §3) — distinct from suspend: this blocks only new
+  // analyses, for cost-abuse cases where the account itself shouldn't be fully locked out.
+  const profile = await scoped.profiles.get(userId);
+  if (profile?.pipelineKillSwitch) {
+    return new Response(JSON.stringify({ error: "pipeline_disabled" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   const rateLimit = await checkRateLimit(`user:${userId}`, RATE_LIMITS.analyze);
   if (!rateLimit.allowed) return rateLimitResponse(rateLimit);
 

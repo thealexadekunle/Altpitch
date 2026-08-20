@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
-import { eq, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, or, sql } from "drizzle-orm";
 import { withAdmin, adminDb } from "@/lib/admin/require-admin";
-import { creditPurchases, pipelineRuns, subscriptions, usageCredits, user } from "@/lib/db/schema";
+import { creditLedger, creditPurchases, pipelineRuns, subscriptions, usageCredits, user } from "@/lib/db/schema";
 import { PLAN, TOP_UP_PACKS } from "@/lib/billing/plans";
 import { TOKEN_RATES_USD_PER_MTOK } from "@/lib/billing/cost";
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,9 @@ export async function GET(request: Request) {
   return withAdmin(request, async () => {
     const db = adminDb();
 
-    const [[subs], [topups], [spend], [creditsUsed], perUser] = await Promise.all([
+    const thirtyDaysAgo = new Date(Date.now() - THIRTY_DAYS_MS);
+
+    const [[subs], [topups], [spend], [creditsUsed], perUser, [churned], [signups], [funnel1], [funnel2], [funnel3], adjustmentLog] = await Promise.all([
       db
         .select({ active: sql<number>`count(*)::int` })
         .from(subscriptions)
@@ -66,6 +70,38 @@ export async function GET(request: Request) {
         .from(user)
         .leftJoin(subscriptions, eq(subscriptions.userId, user.id))
         .limit(500),
+
+      // Churn: subscriptions that lapsed to canceled in the last 30 days, against the population
+      // that could have churned (currently active + those that just did).
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(subscriptions)
+        .where(and(eq(subscriptions.status, "canceled"), gte(subscriptions.updatedAt, thirtyDaysAgo))),
+
+      // Trial funnel: signups -> 1st/2nd/3rd credit used -> subscribed. usage_credits.used counts
+      // consumption across all buckets for a user's lifetime-period row (created at signup).
+      db.select({ count: sql<number>`count(*)::int` }).from(user),
+      db
+        .select({ count: sql<number>`count(distinct ${usageCredits.userId})::int` })
+        .from(usageCredits)
+        .where(and(eq(usageCredits.period, "lifetime"), sql`${usageCredits.used} >= 1`)),
+      db
+        .select({ count: sql<number>`count(distinct ${usageCredits.userId})::int` })
+        .from(usageCredits)
+        .where(and(eq(usageCredits.period, "lifetime"), sql`${usageCredits.used} >= 2`)),
+      db
+        .select({ count: sql<number>`count(distinct ${usageCredits.userId})::int` })
+        .from(usageCredits)
+        .where(and(eq(usageCredits.period, "lifetime"), sql`${usageCredits.used} >= 3`)),
+
+      // Refund/adjustment log: ledger entries an admin made by hand (actorId set) rather than the
+      // system (pipeline consumption, monthly renewal, webhook-driven top-up).
+      db
+        .select({ id: creditLedger.id, userId: creditLedger.userId, bucket: creditLedger.bucket, delta: creditLedger.delta, reason: creditLedger.reason, actorId: creditLedger.actorId, createdAt: creditLedger.createdAt })
+        .from(creditLedger)
+        .where(and(isNotNull(creditLedger.actorId), or(sql`${creditLedger.reason} ilike '%refund%'`, sql`${creditLedger.reason} ilike 'admin_adjustment%'`)))
+        .orderBy(desc(creditLedger.createdAt))
+        .limit(100),
     ]);
 
     const activeSubscribers = subs?.active ?? 0;
@@ -88,10 +124,14 @@ export async function GET(request: Request) {
       };
     });
 
+    const churnedCount = churned?.count ?? 0;
+    const churnRate = activeSubscribers + churnedCount > 0 ? churnedCount / (activeSubscribers + churnedCount) : 0;
+
     return NextResponse.json({
       plan: { price: PLAN.monthlyPrice, monthlyCredits: PLAN.monthlyCredits },
       packs: TOP_UP_PACKS,
       mrrUsd,
+      arpuUsd: activeSubscribers > 0 ? mrrUsd / activeSubscribers : 0,
       activeSubscribers,
       topUpRevenueUsd: Number(topups?.revenueUsd ?? 0),
       topUpPurchases: topups?.purchases ?? 0,
@@ -104,6 +144,16 @@ export async function GET(request: Request) {
       marginPerSubscriberUsd: activeSubscribers > 0 ? (mrrUsd - totalCostUsd) / activeSubscribers : 0,
       subscribers: subscribers.sort((a, b) => a.marginUsd - b.marginUsd),
       underwater: subscribers.filter((s) => s.costUsd > s.paidUsd),
+      churnRateMonthly: churnRate,
+      churnedLast30d: churnedCount,
+      trialFunnel: {
+        signups: signups?.count ?? 0,
+        usedFirstCredit: funnel1?.count ?? 0,
+        usedSecondCredit: funnel2?.count ?? 0,
+        usedThirdCredit: funnel3?.count ?? 0,
+        subscribed: activeSubscribers,
+      },
+      adjustmentLog,
     });
   });
 }

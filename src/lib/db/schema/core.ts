@@ -38,6 +38,10 @@ export const profiles = pgTable("profiles", {
   // not scheduled. The account stays fully suspended (blocked sign-in, data intact) the whole
   // window, so canceling before the date is a full, clean undo. See AUDIT_REPORT.md P1-9.
   deletionScheduledFor: timestamp("deletion_scheduled_for", { withTimezone: true }),
+  // Cost-abuse kill switch (ALTPITCH_ADMIN_BUILD.md §3) — blocks new analyses for this user
+  // specifically, without the full account lockout suspend does. Sign-in, browsing existing
+  // data, and everything else stays intact; only /api/analyze checks this.
+  pipelineKillSwitch: boolean("pipeline_kill_switch").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

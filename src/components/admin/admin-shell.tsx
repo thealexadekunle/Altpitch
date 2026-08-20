@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, ShieldAlert, Megaphone, Flag, ArrowLeft, KeyRound, Activity, DollarSign } from "lucide-react";
+import { LayoutDashboard, Users, ShieldAlert, Megaphone, Flag, ArrowLeft, KeyRound, Activity, DollarSign, ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -10,11 +10,12 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 const NAV_ITEMS = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/users", label: "Users", icon: Users },
-  { href: "/admin/operations", label: "Operations", icon: Activity },
-  { href: "/admin/finance", label: "Finance", icon: DollarSign },
+  { href: "/admin/billing", label: "Billing", icon: DollarSign },
+  { href: "/admin/ops", label: "Ops", icon: Activity },
   { href: "/admin/abuse", label: "Abuse controls", icon: ShieldAlert },
-  { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
   { href: "/admin/flags", label: "Feature flags", icon: Flag },
+  { href: "/admin/broadcast", label: "Broadcast", icon: Megaphone },
+  { href: "/admin/audit", label: "Audit log", icon: ScrollText },
   { href: "/admin/security", label: "Security", icon: KeyRound },
 ];
 

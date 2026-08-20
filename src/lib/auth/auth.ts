@@ -103,6 +103,22 @@ export const auth = betterAuth({
         },
       },
     },
+    // Owner bootstrap (ALTPITCH_ADMIN_BUILD.md §0) — there is no signup path to admin, ever.
+    // The only way an account becomes 'owner' is this hook matching OWNER_EMAIL, a server-side
+    // env var, never user input. Checked on every sign-in (not just first signup) so setting
+    // OWNER_EMAIL to an account that already existed promotes it on its next session, and the
+    // effect is idempotent — re-running it on every login of an already-owner account is a no-op.
+    session: {
+      create: {
+        after: async (session) => {
+          const ownerEmail = process.env.OWNER_EMAIL?.toLowerCase().trim();
+          if (!ownerEmail) return;
+          const [target] = await db.select({ email: schema.user.email }).from(schema.user).where(eq(schema.user.id, session.userId)).limit(1);
+          if (target?.email.toLowerCase() !== ownerEmail) return;
+          await db.update(schema.profiles).set({ role: "owner" }).where(eq(schema.profiles.userId, session.userId));
+        },
+      },
+    },
   },
   session: {
     cookieCache: { enabled: true, maxAge: 60 }, // 60s in-memory cache, avoids a DB hit on every request

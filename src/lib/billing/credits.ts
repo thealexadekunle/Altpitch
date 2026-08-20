@@ -1,7 +1,7 @@
 import "server-only";
 import { eq, and, sql, inArray } from "drizzle-orm";
 import { db, dbTx } from "@/lib/db/client";
-import { usageCredits, subscriptions, creditPurchases } from "@/lib/db/schema";
+import { usageCredits, subscriptions, creditPurchases, creditLedger } from "@/lib/db/schema";
 import { BURN_ORDER, PLAN, TRIAL_CREDITS, TOP_UP_PACKS, DUNNING_GRACE_PERIOD_DAYS, type CreditBucket, type TopUpPackId } from "@/lib/billing/plans";
 import { isWithinGracePeriod } from "@/lib/billing/billing.service";
 
@@ -128,11 +128,13 @@ export async function consumeCredit(userId: string): Promise<CreditBucket | null
         // without it) — create it already at 1 used rather than 0-then-increment.
         if (period !== "lifetime") continue;
         await tx.insert(usageCredits).values({ userId, period: "lifetime", granted: TRIAL_CREDITS, used: 1 });
+        await tx.insert(creditLedger).values({ userId, bucket: "lifetime", delta: -1, reason: "pipeline_run", actorId: null });
         return "lifetime";
       }
 
       if (row.used < row.granted) {
         await tx.update(usageCredits).set({ used: sql`${usageCredits.used} + 1` }).where(eq(usageCredits.id, row.id));
+        await tx.insert(creditLedger).values({ userId, bucket: period, delta: -1, reason: "pipeline_run", actorId: null });
         return period;
       }
     }
@@ -147,6 +149,7 @@ export async function refundCredit(userId: string, bucket: CreditBucket): Promis
       .update(usageCredits)
       .set({ used: sql`GREATEST(${usageCredits.used} - 1, 0)` })
       .where(and(eq(usageCredits.userId, userId), eq(usageCredits.period, bucket)));
+    await tx.insert(creditLedger).values({ userId, bucket, delta: 1, reason: "pipeline_run_failed_refund", actorId: null });
   });
 }
 
@@ -159,10 +162,11 @@ export async function resetMonthlyGrant(userId: string, credits: number = PLAN.m
       target: [usageCredits.userId, usageCredits.period],
       set: { granted: credits, used: 0, updatedAt: new Date() },
     });
+  await db.insert(creditLedger).values({ userId, bucket: "subscription", delta: credits, reason: "monthly_renewal", actorId: null });
 }
 
 /** Top-up purchase, and the owner "grant credits" comp tool. Adds to the non-expiring bucket. */
-export async function grantTopUpCredits(userId: string, credits: number): Promise<void> {
+export async function grantTopUpCredits(userId: string, credits: number, reason: string, actorId: string | null): Promise<void> {
   await db
     .insert(usageCredits)
     .values({ userId, period: "topup", granted: credits, used: 0 })
@@ -170,17 +174,67 @@ export async function grantTopUpCredits(userId: string, credits: number): Promis
       target: [usageCredits.userId, usageCredits.period],
       set: { granted: sql`${usageCredits.granted} + ${credits}`, updatedAt: new Date() },
     });
+  await db.insert(creditLedger).values({ userId, bucket: "topup", delta: credits, reason, actorId });
 }
 
 /** A paid pack: credits plus the revenue record the financial view reports on. */
 export async function grantTopUpPack(userId: string, packId: TopUpPackId, provider = "unconfigured"): Promise<void> {
   const pack = TOP_UP_PACKS[packId];
-  await grantTopUpCredits(userId, pack.credits);
+  await grantTopUpCredits(userId, pack.credits, "topup_purchase", null);
   await db.insert(creditPurchases).values({
     userId,
     pack: packId,
     credits: pack.credits,
     amountCents: Math.round(pack.price * 100),
     provider,
+  });
+}
+
+/**
+ * Admin credit administration (ALTPITCH_ADMIN_BUILD.md §3): grant/deduct require a real reason
+ * (min 10 chars, enforced here — the one place both actions go through) and land in the ledger
+ * marked with the acting admin's id. Deducts can never take a balance negative; grants always
+ * land in the non-expiring top-up bucket, same as a purchased pack — there's no "change plan"
+ * action in the single-plan model, grants are the whole comp mechanism.
+ */
+const MIN_REASON_LENGTH = 10;
+
+export class InvalidReasonError extends Error {
+  constructor() {
+    super(`A reason of at least ${MIN_REASON_LENGTH} characters is required.`);
+  }
+}
+
+export async function adminGrantCredits(userId: string, amount: number, reason: string, actorId: string): Promise<void> {
+  if (reason.trim().length < MIN_REASON_LENGTH) throw new InvalidReasonError();
+  await grantTopUpCredits(userId, amount, `admin_adjustment: ${reason.trim()}`, actorId);
+}
+
+export async function adminDeductCredits(userId: string, amount: number, reason: string, actorId: string): Promise<{ deducted: number }> {
+  if (reason.trim().length < MIN_REASON_LENGTH) throw new InvalidReasonError();
+
+  return dbTx().transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: usageCredits.id, period: usageCredits.period, granted: usageCredits.granted, used: usageCredits.used })
+      .from(usageCredits)
+      .where(and(eq(usageCredits.userId, userId), inArray(usageCredits.period, [...BURN_ORDER])))
+      .for("update");
+
+    // Deduct from top-up first (least "earned"/expected by the user), then subscription, then
+    // lifetime trial — the reverse of spend order, so a deduction eats into what's least missed.
+    let remaining = amount;
+    for (const period of ["topup", "subscription", "lifetime"] as CreditBucket[]) {
+      if (remaining <= 0) break;
+      const row = rows.find((r) => r.period === period);
+      if (!row) continue;
+      const available = Math.max(row.granted - row.used, 0);
+      const take = Math.min(available, remaining);
+      if (take <= 0) continue;
+      await tx.update(usageCredits).set({ used: sql`${usageCredits.used} + ${take}` }).where(eq(usageCredits.id, row.id));
+      await tx.insert(creditLedger).values({ userId, bucket: period, delta: -take, reason: `admin_adjustment: ${reason.trim()}`, actorId });
+      remaining -= take;
+    }
+
+    return { deducted: amount - remaining };
   });
 }

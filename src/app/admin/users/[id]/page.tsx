@@ -4,13 +4,14 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Eye, KeyRound, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Eye, KeyRound, Trash2, Power, Monitor } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 
 interface AdminUserDetail {
   id: string;
@@ -22,10 +23,15 @@ interface AdminUserDetail {
     suspendedReason: string | null;
     name: string;
     deletionScheduledFor: string | null;
+    pipelineKillSwitch: boolean;
   } | null;
   credits: { used: number; granted: number } | null;
   subscription: { plan: string; status: string } | null;
   jobCount: number;
+  creditLedger: { id: string; bucket: string; delta: number; reason: string; actorId: string | null; createdAt: string }[];
+  pipelineHistory: { id: string; stage: string; status: string; createdAt: string }[];
+  auditTrail: { id: string; action: string; actorId: string | null; metadata: unknown; createdAt: string }[];
+  sessions: { id: string; createdAt: string; expiresAt: string; ipAddress: string | null; userAgent: string | null }[];
 }
 
 interface ImpersonatedJob {
@@ -41,10 +47,14 @@ export default function AdminUserDetailPage() {
   const [impersonating, setImpersonating] = useState(false);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [reason, setReason] = useState("");
-  const [creditsToGrant, setCreditsToGrant] = useState("3");
+  const [creditsToGrant, setCreditsToGrant] = useState("10");
+  const [grantReason, setGrantReason] = useState("");
+  const [creditsToDeduct, setCreditsToDeduct] = useState("10");
+  const [deductReason, setDeductReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [jobs, setJobs] = useState<ImpersonatedJob[] | null>(null);
   const [loadingJobs, setLoadingJobs] = useState(false);
+  const [revokingSession, setRevokingSession] = useState<string | null>(null);
 
   function reload() {
     fetch(`/api/admin/users/${params.id}`)
@@ -54,7 +64,7 @@ export default function AdminUserDetailPage() {
 
   useEffect(reload, [params.id]);
 
-  async function handlePatch(body: Record<string, unknown>) {
+  async function handlePatch(body: Record<string, unknown>, onSuccess?: () => void) {
     setBusy(true);
     try {
       const res = await fetch(`/api/admin/users/${params.id}`, {
@@ -68,10 +78,28 @@ export default function AdminUserDetailPage() {
       }
       toast.success("Updated.");
       reload();
+      onSuccess?.();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Request failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleRevokeSession(sessionId: string) {
+    setRevokingSession(sessionId);
+    try {
+      const res = await fetch(`/api/admin/users/${params.id}/sessions/${sessionId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? "Couldn't revoke session.");
+      }
+      toast.success("Session revoked.");
+      reload();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't revoke session.");
+    } finally {
+      setRevokingSession(null);
     }
   }
 
@@ -125,6 +153,7 @@ export default function AdminUserDetailPage() {
           <h1 className="text-xl font-semibold tracking-tight">{detail.email}</h1>
           {detail.profile?.role && detail.profile.role !== "user" && <Badge variant="accent">{detail.profile.role}</Badge>}
           {suspended && <Badge variant="destructive">suspended</Badge>}
+          {detail.profile?.pipelineKillSwitch && <Badge variant="warning">kill switch on</Badge>}
         </div>
         <p className="text-sm text-muted-foreground">
           Joined {new Date(detail.createdAt).toLocaleDateString()} · {detail.jobCount} jobs analyzed
@@ -135,27 +164,69 @@ export default function AdminUserDetailPage() {
         <CardHeader>
           <CardTitle>Plan &amp; credits</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             Plan: <span className="text-foreground">{detail.subscription?.plan ?? "trial"}</span>
           </p>
           <p className="text-sm text-muted-foreground">
             Trial credits: <span className="text-foreground">{detail.credits ? `${detail.credits.used}/${detail.credits.granted} used` : "not initialized"}</span>
           </p>
-          <div className="flex items-end gap-2">
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="grant-credits">Grant additional credits</Label>
-              <Input id="grant-credits" type="number" min={1} value={creditsToGrant} onChange={(e) => setCreditsToGrant(e.target.value)} className="w-32" />
+              <Label htmlFor="grant-credits">Grant credits</Label>
+              <div className="flex gap-2">
+                <Input id="grant-credits" type="number" min={1} value={creditsToGrant} onChange={(e) => setCreditsToGrant(e.target.value)} className="w-24" />
+                <Input value={grantReason} onChange={(e) => setGrantReason(e.target.value)} placeholder="Reason (min 10 chars)" className="flex-1" />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || grantReason.trim().length < 10}
+                onClick={() => handlePatch({ grantCredits: Number(creditsToGrant), grantReason }, () => setGrantReason(""))}
+              >
+                {busy ? <Loader2 className="animate-spin" /> : null}
+                Grant
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => handlePatch({ grantCredits: Number(creditsToGrant) })}
-            >
-              {busy ? <Loader2 className="animate-spin" /> : null}
-              Grant
-            </Button>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="deduct-credits">Deduct credits</Label>
+              <div className="flex gap-2">
+                <Input id="deduct-credits" type="number" min={1} value={creditsToDeduct} onChange={(e) => setCreditsToDeduct(e.target.value)} className="w-24" />
+                <Input value={deductReason} onChange={(e) => setDeductReason(e.target.value)} placeholder="Reason (min 10 chars)" className="flex-1" />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || deductReason.trim().length < 10}
+                onClick={() => handlePatch({ deductCredits: Number(creditsToDeduct), deductReason }, () => setDeductReason(""))}
+              >
+                {busy ? <Loader2 className="animate-spin" /> : null}
+                Deduct
+              </Button>
+              <p className="text-xs text-muted-foreground">Can never go below zero — deducts as much as is available.</p>
+            </div>
           </div>
+
+          {detail.creditLedger.length > 0 && (
+            <div className="border-t border-border pt-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">Ledger (last {detail.creditLedger.length})</p>
+              <div className="max-h-56 space-y-1 overflow-y-auto">
+                {detail.creditLedger.map((row) => (
+                  <div key={row.id} className="flex items-center justify-between gap-2 text-xs">
+                    <span className={row.delta >= 0 ? "text-foreground" : "text-danger"}>
+                      {row.delta >= 0 ? "+" : ""}
+                      {row.delta}
+                    </span>
+                    <Badge variant="muted">{row.bucket}</Badge>
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">{row.reason}</span>
+                    <span className="shrink-0 text-muted-foreground">{new Date(row.createdAt).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -185,6 +256,18 @@ export default function AdminUserDetailPage() {
             </div>
           )}
 
+          <div className="flex items-center justify-between border-t border-border pt-3">
+            <div>
+              <p className="text-sm text-foreground">Pipeline kill switch</p>
+              <p className="text-xs text-muted-foreground">Blocks this user from running new analyses immediately.</p>
+            </div>
+            <Switch
+              checked={detail.profile?.pipelineKillSwitch ?? false}
+              disabled={busy}
+              onCheckedChange={(checked) => handlePatch({ killSwitch: checked })}
+            />
+          </div>
+
           <div className="border-t border-border pt-3">
             <Button variant="outline" size="sm" disabled={busy} onClick={() => handlePatch({ forcePasswordReset: true })}>
               {busy ? <Loader2 className="animate-spin" /> : <KeyRound />}
@@ -193,6 +276,13 @@ export default function AdminUserDetailPage() {
             <p className="mt-1.5 text-xs text-muted-foreground">
               Signs them out everywhere immediately and emails a reset link. They can&apos;t sign back in with their old password.
             </p>
+          </div>
+
+          <div className="border-t border-border pt-3">
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => handlePatch({ revokeAllSessions: true })}>
+              {busy ? <Loader2 className="animate-spin" /> : <Power />}
+              Revoke all sessions
+            </Button>
           </div>
 
           <div className="border-t border-border pt-3">
@@ -218,6 +308,75 @@ export default function AdminUserDetailPage() {
               </div>
             )}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Monitor className="h-4 w-4" />
+            Active sessions
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {detail.sessions.length === 0 && <p className="text-sm text-muted-foreground">No active sessions.</p>}
+          {detail.sessions.length > 0 && (
+            <div className="divide-y divide-border rounded-md border border-border">
+              {detail.sessions.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+                  <div className="min-w-0">
+                    <p className="truncate text-foreground">{s.ipAddress ?? "unknown IP"}</p>
+                    <p className="truncate text-muted-foreground">{s.userAgent ?? "unknown device"}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-muted-foreground">expires {new Date(s.expiresAt).toLocaleDateString()}</span>
+                    <Button variant="ghost" size="sm" disabled={revokingSession === s.id} onClick={() => handleRevokeSession(s.id)}>
+                      {revokingSession === s.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Revoke"}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Pipeline history</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {detail.pipelineHistory.length === 0 && <p className="text-sm text-muted-foreground">No runs yet.</p>}
+          {detail.pipelineHistory.length > 0 && (
+            <div className="max-h-56 space-y-1 overflow-y-auto">
+              {detail.pipelineHistory.map((run) => (
+                <div key={run.id} className="flex items-center justify-between text-xs">
+                  <Badge variant="muted">{run.stage}</Badge>
+                  <span className="text-muted-foreground">{run.status}</span>
+                  <span className="text-muted-foreground">{new Date(run.createdAt).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Audit trail (actions taken on this user)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {detail.auditTrail.length === 0 && <p className="text-sm text-muted-foreground">No admin actions logged yet.</p>}
+          {detail.auditTrail.length > 0 && (
+            <div className="max-h-56 space-y-1 overflow-y-auto">
+              {detail.auditTrail.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between text-xs">
+                  <span className="text-foreground">{entry.action}</span>
+                  <span className="text-muted-foreground">{new Date(entry.createdAt).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -15,7 +15,7 @@
   },
   "overrides": [
     {
-      "files": ["src/lib/data/**", "src/lib/admin/**", "src/lib/billing/**", "src/lib/insights/**", "src/lib/db/scoped.ts", "src/lib/audit-log.ts", "src/lib/rate-limit.ts", "src/lib/auth/**", "src/app/api/auth/**", "src/app/api/health/**", "src/app/api/cron/**", "src/app/api/site-status/**"],
+      "files": ["src/lib/data/**", "src/lib/admin/**", "src/lib/billing/**", "src/lib/insights/**", "src/lib/flags/**", "src/lib/db/scoped.ts", "src/lib/audit-log.ts", "src/lib/rate-limit.ts", "src/lib/auth/**", "src/app/api/auth/**", "src/app/api/health/**", "src/app/api/cron/**", "src/app/api/site-status/**"],
       "rules": {
         "no-restricted-imports": "off"
       }

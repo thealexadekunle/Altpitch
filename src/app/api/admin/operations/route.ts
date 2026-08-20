@@ -18,6 +18,27 @@ function databaseTarget(): string {
   }
 }
 
+/** vercel.json's cron schedule, hand-parsed rather than pulling in a cron-parser dependency for
+ * one fixed daily expression. If the schedule in vercel.json ever changes, this constant needs to
+ * change with it — there's no way to read vercel.json from a running serverless function. */
+const CRON_SCHEDULE_UTC_HOUR = 4;
+function nextCronRunAt(): Date {
+  const next = new Date();
+  next.setUTCHours(CRON_SCHEDULE_UTC_HOUR, 0, 0, 0);
+  if (next.getTime() <= Date.now()) next.setUTCDate(next.getUTCDate() + 1);
+  return next;
+}
+
+/** Sentry and Neon's own APIs need auth tokens this deploy doesn't have configured — rather than
+ * fake a feed, report honestly that they're unconfigured (same pattern as /api/health's r2/billing
+ * checks) so the UI can say so instead of showing fabricated data. */
+function sentryConfigured(): boolean {
+  return Boolean(process.env.SENTRY_AUTH_TOKEN);
+}
+function neonApiConfigured(): boolean {
+  return Boolean(process.env.NEON_API_KEY);
+}
+
 /**
  * Operations view — Corrections 03 §2 requires every over-budget run to be visible here.
  * A stage is over budget when its measured latency exceeded the timeout it ran under, both of
@@ -27,7 +48,7 @@ export async function GET(request: Request) {
   return withAdmin(request, async () => {
     const db = adminDb();
 
-    const [stageStats, overBudget, failures, runDurations, lastCronRun] = await Promise.all([
+    const [stageStats, overBudget, failures, runDurations, lastCronRun, adversarialFailures] = await Promise.all([
       db
         .select({
           stage: pipelineRuns.stage,
@@ -83,6 +104,20 @@ export async function GET(request: Request) {
         .where(eq(auditLog.action, "cron.cleanup_rate_limit_hits"))
         .orderBy(desc(auditLog.createdAt))
         .limit(1),
+
+      // A "schema failure" or "adversarial" run is one Zod rejected or a stage flagged, both of
+      // which leave their signature in the error text — there's no separate status enum value for
+      // it (status stays "error"; error carries the reason).
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(pipelineRuns)
+        .where(
+          and(
+            eq(pipelineRuns.status, "error"),
+            gt(pipelineRuns.createdAt, sql`now() - interval '24 hours'`),
+            sql`(${pipelineRuns.error} ilike '%schema%' or ${pipelineRuns.error} ilike '%zod%' or ${pipelineRuns.error} ilike '%adversarial%')`
+          )
+        ),
     ]);
 
     return NextResponse.json({
@@ -92,7 +127,11 @@ export async function GET(request: Request) {
       failures,
       runDurations,
       cronLastRunAt: lastCronRun[0]?.createdAt ?? null,
+      cronNextRunAt: nextCronRunAt().toISOString(),
+      adversarialOrSchemaFailures24h: adversarialFailures[0]?.count ?? 0,
       databaseTarget: databaseTarget(),
+      sentry: { configured: sentryConfigured(), issues: [] as never[] },
+      neon: { configured: neonApiConfigured(), branch: null as string | null, computeStatus: null as string | null },
     });
   });
 }

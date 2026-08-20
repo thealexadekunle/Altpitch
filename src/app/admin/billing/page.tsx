@@ -16,9 +16,20 @@ interface SubscriberRow {
   marginUsd: number;
 }
 
+interface AdjustmentRow {
+  id: string;
+  userId: string;
+  bucket: string;
+  delta: number;
+  reason: string;
+  actorId: string | null;
+  createdAt: string;
+}
+
 interface Finance {
   plan: { price: number; monthlyCredits: number };
   mrrUsd: number;
+  arpuUsd: number;
   activeSubscribers: number;
   topUpRevenueUsd: number;
   topUpPurchases: number;
@@ -30,6 +41,16 @@ interface Finance {
   marginPerSubscriberUsd: number;
   subscribers: SubscriberRow[];
   underwater: SubscriberRow[];
+  churnRateMonthly: number;
+  churnedLast30d: number;
+  trialFunnel: {
+    signups: number;
+    usedFirstCredit: number;
+    usedSecondCredit: number;
+    usedThirdCredit: number;
+    subscribed: number;
+  };
+  adjustmentLog: AdjustmentRow[];
 }
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
@@ -72,20 +93,46 @@ export default function AdminFinancePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Finance</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Billing</h1>
         <p className="text-sm text-muted-foreground">
           Single plan at {usd(data.plan.price)}/month, {data.plan.monthlyCredits} credits.
         </p>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="MRR" value={usd(data.mrrUsd)} hint={`${data.activeSubscribers} active subscribers`} />
+        <Stat label="MRR" value={usd(data.mrrUsd)} hint={`${data.activeSubscribers} active subscribers · ARPU ${usd(data.arpuUsd)}`} />
         <Stat
           label="Top-up revenue"
           value={usd(data.topUpRevenueUsd)}
           hint={`${data.topUpPurchases} purchases · ${data.topUpCreditsSold} credits`}
         />
         <Stat label="Margin per subscriber" value={usd(data.marginPerSubscriberUsd)} hint="MRR less all API spend" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Stat label="Monthly churn" value={`${(data.churnRateMonthly * 100).toFixed(1)}%`} hint={`${data.churnedLast30d} canceled in last 30d`} />
+        <Card>
+          <CardContent className="p-5">
+            <p className="mb-2 text-xs text-muted-foreground">Trial funnel</p>
+            <div className="flex items-center gap-1 text-xs">
+              {[
+                { label: "Signups", value: data.trialFunnel.signups },
+                { label: "1st credit", value: data.trialFunnel.usedFirstCredit },
+                { label: "2nd credit", value: data.trialFunnel.usedSecondCredit },
+                { label: "3rd credit", value: data.trialFunnel.usedThirdCredit },
+                { label: "Subscribed", value: data.trialFunnel.subscribed },
+              ].map((step, i) => (
+                <div key={step.label} className="flex items-center gap-1">
+                  {i > 0 && <span className="text-muted-foreground">→</span>}
+                  <div className="text-center">
+                    <p className="font-mono font-semibold tabular-nums">{step.value}</p>
+                    <p className="text-muted-foreground">{step.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card className={guardrailOk ? undefined : "border-destructive/50"}>
@@ -184,6 +231,34 @@ export default function AdminFinancePage() {
               ))}
             </tbody>
           </table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Refund / adjustment log</CardTitle>
+          <p className="text-xs text-muted-foreground">Ledger entries an admin made by hand — refunds or manual balance corrections.</p>
+        </CardHeader>
+        <CardContent>
+          {data.adjustmentLog.length === 0 && <p className="text-sm text-muted-foreground">No manual adjustments logged.</p>}
+          {data.adjustmentLog.length > 0 && (
+            <div className="divide-y divide-border">
+              {data.adjustmentLog.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                  <Link href={`/admin/users/${entry.userId}`} className="min-w-0 truncate hover:text-accent">
+                    {entry.reason}
+                  </Link>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className={cn("font-mono text-xs tabular-nums", entry.delta >= 0 ? "text-accent" : "text-destructive")}>
+                      {entry.delta >= 0 ? "+" : ""}
+                      {entry.delta}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{new Date(entry.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

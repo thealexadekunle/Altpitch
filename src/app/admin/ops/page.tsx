@@ -37,7 +37,11 @@ interface Operations {
   failures: { status: string; count: number }[];
   runDurations: RunDuration[];
   cronLastRunAt: string | null;
+  cronNextRunAt: string;
+  adversarialOrSchemaFailures24h: number;
   databaseTarget: string;
+  sentry: { configured: boolean; issues: never[] };
+  neon: { configured: boolean; branch: string | null; computeStatus: string | null };
 }
 
 const seconds = (ms: number | null) => (ms === null ? "—" : `${(ms / 1000).toFixed(1)}s`);
@@ -55,7 +59,7 @@ export default function AdminOperationsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Operations</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Ops</h1>
         <p className="text-sm text-muted-foreground">
           Pipeline latency against budget. Target p50 {seconds(data?.budget.p50TargetMs ?? 60000)}, hard ceiling{" "}
           {seconds(data?.budget.ceilingMs ?? 120000)}.
@@ -64,10 +68,31 @@ export default function AdminOperationsPage() {
           Database: <span className="font-mono text-foreground">{data?.databaseTarget ?? "…"}</span>
           {" · "}
           Cron last ran:{" "}
-          <span className="text-foreground">
-            {data?.cronLastRunAt ? new Date(data.cronLastRunAt).toLocaleString() : "never"}
-          </span>
+          <span className="text-foreground">{data?.cronLastRunAt ? new Date(data.cronLastRunAt).toLocaleString() : "never"}</span>
+          {" · next: "}
+          <span className="text-foreground">{data?.cronNextRunAt ? new Date(data.cronNextRunAt).toLocaleString() : "…"}</span>
         </p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Card>
+          <CardContent className="p-5">
+            <p className="font-mono text-2xl font-semibold tabular-nums">{data?.adversarialOrSchemaFailures24h ?? "—"}</p>
+            <p className="text-xs text-muted-foreground">Adversarial / schema failures (24h)</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <p className="font-mono text-sm text-muted-foreground">{data?.sentry.configured ? `${data.sentry.issues.length} open issues` : "Not configured"}</p>
+            <p className="text-xs text-muted-foreground">Sentry issue feed{data && !data.sentry.configured && " — set SENTRY_AUTH_TOKEN"}</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <p className="font-mono text-sm text-muted-foreground">{data?.neon.configured ? (data.neon.computeStatus ?? "unknown") : "Not configured"}</p>
+            <p className="text-xs text-muted-foreground">Neon branch/compute{data && !data.neon.configured && " — set NEON_API_KEY"}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>

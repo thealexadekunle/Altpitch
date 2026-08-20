@@ -56,6 +56,29 @@ export const webhookEvents = pgTable("webhook_events", {
   receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/** Every credit event, itemized — grants, decrements, refunds, top-ups, admin adjustments
+ * (ALTPITCH_ADMIN_BUILD.md §3 "credit ledger"). `usage_credits` stays the fast aggregate the
+ * spend-checking hot path reads; this is the append-style history the admin user-detail page and
+ * the financial refund/adjustment log read instead. `actorId` null means system-driven (a
+ * pipeline run consuming/refunding a credit, a webhook renewal) — non-null means an admin did it,
+ * and `reason` is required for those (enforced in code, not the schema, since a system entry has
+ * no reason to give). */
+export const creditLedger = pgTable(
+  "credit_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    bucket: text("bucket", { enum: ["lifetime", "subscription", "topup"] }).notNull(),
+    delta: integer("delta").notNull(), // positive = granted, negative = consumed/deducted
+    reason: text("reason").notNull(),
+    actorId: text("actor_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("credit_ledger_user_id_idx").on(t.userId), index("credit_ledger_created_at_idx").on(t.createdAt)]
+);
+
 /** Top-up purchases, recorded from the provider webhook. Kept separate from `usage_credits` so
  * the admin financial view can report top-up revenue as its own line (Corrections 03 §6) —
  * a credit balance says nothing about what was paid for it or when. */

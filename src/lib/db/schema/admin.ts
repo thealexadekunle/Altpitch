@@ -14,6 +14,17 @@ export const rateLimitHits = pgTable(
   (t) => [uniqueIndex("rate_limit_hits_key_route_window_idx").on(t.key, t.route, t.windowStart), index("rate_limit_hits_window_idx").on(t.windowStart)]
 );
 
+// Append-only is enforced at the database level, not just by app convention: BEFORE UPDATE and
+// BEFORE DELETE triggers (reject_audit_log_mutation()) raise on any DELETE and on any UPDATE
+// except one specific shape — actor_id going non-null to null with every other column unchanged,
+// which is the FK's own ON DELETE SET NULL cascade firing when an actor's user row is deleted.
+// Without that carve-out, deleting any admin/owner account who ever performed a logged action
+// would itself throw (the cascade UPDATE getting rejected same as a real tamper attempt) —
+// caught live while verifying user cleanup, not a hypothetical. Added out-of-band via a one-off
+// script the same way pgvector was enabled — Drizzle's schema DSL has no first-class trigger
+// primitive in this version, so `drizzle-kit push` neither manages nor drops it. Verified live: a
+// real content-changing UPDATE and a real DELETE both still raise; the cascade-shaped UPDATE
+// succeeds. See ALTPITCH_ADMIN_BUILD.md §8/DoD.
 export const auditLog = pgTable(
   "audit_log",
   {
@@ -43,6 +54,10 @@ export const siteAnnouncements = pgTable("site_announcements", {
   id: uuid("id").primaryKey().defaultRandom(),
   message: text("message").notNull(),
   level: text("level", { enum: ["info", "warning", "critical"] }).notNull().default("info"),
+  link: text("link"),
+  dismissible: boolean("dismissible").notNull().default(true),
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
   active: boolean("active").notNull().default(true),
   createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

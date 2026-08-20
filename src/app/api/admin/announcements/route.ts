@@ -18,6 +18,10 @@ export async function GET(request: Request) {
 const BodySchema = z.object({
   message: z.string().min(1).max(500),
   level: z.enum(["info", "warning", "critical"]),
+  link: z.string().url().max(500).nullable().optional(),
+  dismissible: z.boolean().default(true),
+  scheduledFor: z.string().datetime().nullable().optional(),
+  expiresAt: z.string().datetime().nullable().optional(),
 });
 
 export async function POST(request: Request) {
@@ -28,7 +32,15 @@ export async function POST(request: Request) {
 
     const [created] = await adminDb()
       .insert(siteAnnouncements)
-      .values({ message: parsedBody.data.message, level: parsedBody.data.level, createdBy: session.user.id })
+      .values({
+        message: parsedBody.data.message,
+        level: parsedBody.data.level,
+        link: parsedBody.data.link ?? null,
+        dismissible: parsedBody.data.dismissible,
+        scheduledFor: parsedBody.data.scheduledFor ? new Date(parsedBody.data.scheduledFor) : null,
+        expiresAt: parsedBody.data.expiresAt ? new Date(parsedBody.data.expiresAt) : null,
+        createdBy: session.user.id,
+      })
       .returning({ id: siteAnnouncements.id });
 
     await logAudit({ actorId: session.user.id, action: "admin.create_announcement", target: created.id, ip: getRequestIp(request) });
