@@ -15,7 +15,10 @@ export interface SendEmailParams {
   from?: string;
 }
 
-const DEFAULT_FROM = "Altpitch <notifications@altpitch.dev>"; // update once a verified sending domain is set up
+// resend.dev is Resend's shared onboarding domain — no DNS setup required, but it only delivers
+// to the email address the Resend account itself was signed up with. Switch to a real verified
+// domain (resend.com/domains) once one exists; nothing else in this file needs to change.
+const DEFAULT_FROM = "Altpitch <onboarding@resend.dev>";
 
 export async function sendEmail(params: SendEmailParams): Promise<{ sent: boolean }> {
   const apiKey = process.env.RESEND_API_KEY;
