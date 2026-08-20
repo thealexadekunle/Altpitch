@@ -40,6 +40,10 @@ export default function AdminSecurityPage() {
     try {
       const { data, error } = await authClient.twoFactor.enable({ password, issuer: "Altpitch" });
       if (error) throw new Error(error.message);
+      // better-auth 1.7's twoFactor plugin supports multiple methods; only TOTP is configured
+      // (see lib/auth/auth.ts), so this branch is the only one that can actually come back —
+      // narrowed explicitly rather than asserted, since the type is a real union now.
+      if (data.method !== "totp") throw new Error("Unexpected 2FA method from server.");
       setSecret(new URL(data.totpURI).searchParams.get("secret"));
       setBackupCodes(data.backupCodes);
       setQrDataUrl(await QRCode.toDataURL(data.totpURI));
